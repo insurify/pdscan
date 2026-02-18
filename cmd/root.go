@@ -87,7 +87,12 @@ func NewRootCmd() *cobra.Command {
 				return err
 			}
 
-			if len(args) == 0 {
+			var uri string
+			if len(args) > 0 {
+				uri = args[0]
+			} else if envURI := os.Getenv("PDSCAN_CONNECTION_URI"); envURI != "" {
+				uri = envURI
+			} else {
 				err := cmd.Help()
 				if err != nil {
 					return err
@@ -100,7 +105,7 @@ func NewRootCmd() *cobra.Command {
 			// 	return fmt.Errorf("Too many arguments")
 			// }
 
-			return internal.Main(args[0], showData, showAll, limit, processes, only, except, minCount, pattern, debug, format, include, exclude, output)
+			return internal.Main(uri, showData, showAll, limit, processes, only, except, minCount, pattern, debug, format, include, exclude, output)
 		},
 	}
 	cmd.PersistentFlags().Bool("show-data", false, "Show data")

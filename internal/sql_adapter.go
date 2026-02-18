@@ -13,7 +13,8 @@ import (
 )
 
 type SqlAdapter struct {
-	DB *sqlx.DB
+	DB                  *sqlx.DB
+	UnaliasedDriverName string
 }
 
 func (a *SqlAdapter) TableName() string {
@@ -44,6 +45,7 @@ func (a *SqlAdapter) Init(url string) error {
 	// defer db.Close()
 
 	a.DB = db
+	a.UnaliasedDriverName = u.UnaliasedDriver
 
 	return nil
 }
@@ -55,13 +57,15 @@ func (a SqlAdapter) FetchTables() ([]table, error) {
 
 	var query string
 
-	switch db.DriverName() {
+	switch a.UnaliasedDriverName {
 	case "sqlite3":
 		query = `SELECT '' AS table_schema, name AS table_name FROM sqlite_master WHERE type = 'table' AND name != 'sqlite_sequence' ORDER BY name`
 	case "mysql":
 		query = `SELECT table_schema AS table_schema, table_name AS table_name FROM information_schema.tables WHERE table_schema = DATABASE() OR (DATABASE() IS NULL AND table_schema NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')) ORDER BY table_schema, table_name`
 	case "sqlserver":
 		query = `SELECT table_schema, table_name FROM information_schema.tables WHERE table_type = 'BASE TABLE' ORDER BY table_schema, table_name`
+	case "redshift":
+		query = `SELECT table_schema, table_name FROM svv_tables WHERE table_catalog = current_database() ORDER BY table_schema, table_name`
 	default:
 		query = `SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema NOT IN ('information_schema', 'pg_catalog') ORDER BY table_schema, table_name`
 	}
@@ -78,7 +82,12 @@ func (a SqlAdapter) FetchTableData(table table, limit int) (*tableData, error) {
 	db := a.DB
 
 	var sql string
-	if db.DriverName() == "postgres" {
+	switch a.UnaliasedDriverName {
+	case "redshift":
+		quotedTable := quoteIdent(table.Schema) + "." + quoteIdent(table.Name)
+
+		sql = fmt.Sprintf("SELECT * FROM %s LIMIT %d", quotedTable, limit)
+	case "postgres":
 		quotedTable := quoteIdent(table.Schema) + "." + quoteIdent(table.Name)
 
 		if tsmSystemRowsSupported(db) {
@@ -87,15 +96,15 @@ func (a SqlAdapter) FetchTableData(table table, limit int) (*tableData, error) {
 			// TODO randomize
 			sql = fmt.Sprintf("SELECT * FROM %s LIMIT %d", quotedTable, limit)
 		}
-	} else if db.DriverName() == "sqlite3" {
+	case "sqlite3":
 		// TODO quote table name
 		// TODO make more efficient if primary key exists
 		// https://stackoverflow.com/questions/1253561/sqlite-order-by-rand
 		sql = fmt.Sprintf("SELECT * FROM %s ORDER BY RANDOM() LIMIT %d", table.Name, limit)
-	} else if db.DriverName() == "sqlserver" {
+	case "sqlserver":
 		// TODO quote table name
 		sql = fmt.Sprintf("SELECT * FROM %s TABLESAMPLE (%d rows)", table.Name, limit)
-	} else {
+	default:
 		// TODO quote table name
 		// mysql
 		sql = fmt.Sprintf("SELECT * FROM %s LIMIT %d", table.Schema+"."+table.Name, limit)
