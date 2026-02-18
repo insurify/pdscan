@@ -3,6 +3,7 @@ package internal
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
@@ -25,9 +26,11 @@ type ScanOpts struct {
 	Debug       bool
 	Formatter   Formatter
 	MatchConfig *MatchConfig
+	Include     string
+	Exclude     string
 }
 
-func Main(urlStr string, showData bool, showAll bool, limit int, processes int, only string, except string, minCount int, pattern string, debug bool, format string) error {
+func Main(urlStr string, showData bool, showAll bool, limit int, processes int, only string, except string, minCount int, pattern string, debug bool, format string, include string, exclude string) error {
 	runtime.GOMAXPROCS(processes)
 
 	formatter, found := Formatters[format]
@@ -83,7 +86,7 @@ func Main(urlStr string, showData bool, showAll bool, limit int, processes int, 
 		adapter = &SqlAdapter{}
 	}
 
-	matchList, err := adapter.Scan(ScanOpts{urlStr, showData, showAll, limit, debug, formatter, &matchConfig})
+	matchList, err := adapter.Scan(ScanOpts{urlStr, showData, showAll, limit, debug, formatter, &matchConfig, include, exclude})
 
 	if err != nil {
 		return err
@@ -117,6 +120,11 @@ func scanDataStore(adapter DataStoreAdapter, scanOpts ScanOpts) ([]ruleMatch, er
 	}
 
 	tables, err := adapter.FetchTables()
+	if err != nil {
+		return nil, err
+	}
+
+	tables, err = filterTables(tables, scanOpts.Include, scanOpts.Exclude)
 	if err != nil {
 		return nil, err
 	}
@@ -246,6 +254,55 @@ func scanFiles(adapter FileAdapter, scanOpts ScanOpts) ([]ruleMatch, error) {
 		fmt.Fprintf(os.Stderr, "Found no %s to scan\n", pluralize(0, adapter.ObjectName())[2:])
 		return nil, nil
 	}
+}
+
+func matchesAnyPattern(name string, patterns []string) (bool, error) {
+	for _, pattern := range patterns {
+		matched, err := filepath.Match(pattern, name)
+		if err != nil {
+			return false, fmt.Errorf("Invalid pattern: %s", pattern)
+		}
+		if matched {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func filterTables(tables []table, include string, exclude string) ([]table, error) {
+	if include == "" && exclude == "" {
+		return tables, nil
+	}
+
+	filtered := []table{}
+	for _, t := range tables {
+		name := t.displayName()
+
+		if include != "" {
+			patterns := strings.Split(include, ",")
+			matched, err := matchesAnyPattern(name, patterns)
+			if err != nil {
+				return nil, err
+			}
+			if !matched {
+				continue
+			}
+		}
+
+		if exclude != "" {
+			patterns := strings.Split(exclude, ",")
+			matched, err := matchesAnyPattern(name, patterns)
+			if err != nil {
+				return nil, err
+			}
+			if matched {
+				continue
+			}
+		}
+
+		filtered = append(filtered, t)
+	}
+	return filtered, nil
 }
 
 func updateRules(matchConfig *MatchConfig, value string, except bool) error {
