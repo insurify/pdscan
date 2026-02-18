@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -25,13 +26,24 @@ type ScanOpts struct {
 	Limit       int
 	Debug       bool
 	Formatter   Formatter
+	Writer      io.Writer
 	MatchConfig *MatchConfig
 	Include     string
 	Exclude     string
 }
 
-func Main(urlStr string, showData bool, showAll bool, limit int, processes int, only string, except string, minCount int, pattern string, debug bool, format string, include string, exclude string) error {
+func Main(urlStr string, showData bool, showAll bool, limit int, processes int, only string, except string, minCount int, pattern string, debug bool, format string, include string, exclude string, output string) error {
 	runtime.GOMAXPROCS(processes)
+
+	var writer io.Writer = os.Stdout
+	if output != "" {
+		f, err := os.Create(output)
+		if err != nil {
+			return fmt.Errorf("Could not open output file: %v", err)
+		}
+		defer f.Close()
+		writer = f
+	}
 
 	formatter, found := Formatters[format]
 	if !found {
@@ -86,7 +98,7 @@ func Main(urlStr string, showData bool, showAll bool, limit int, processes int, 
 		adapter = &SqlAdapter{}
 	}
 
-	matchList, err := adapter.Scan(ScanOpts{urlStr, showData, showAll, limit, debug, formatter, &matchConfig, include, exclude})
+	matchList, err := adapter.Scan(ScanOpts{urlStr, showData, showAll, limit, debug, formatter, writer, &matchConfig, include, exclude})
 
 	if err != nil {
 		return err
@@ -165,7 +177,7 @@ func scanDataStore(adapter DataStoreAdapter, scanOpts ScanOpts) ([]ruleMatch, er
 				matchFinder := NewMatchFinder(scanOpts.MatchConfig)
 				tableMatchList := matchFinder.CheckTableData(table, tableData)
 
-				err = printMatchList(scanOpts.Formatter, tableMatchList, scanOpts.ShowData, scanOpts.ShowAll, adapter.RowName())
+				err = printMatchList(scanOpts.Writer, scanOpts.Formatter, tableMatchList, scanOpts.ShowData, scanOpts.ShowAll, adapter.RowName())
 				if err != nil {
 					return err
 				}
@@ -232,7 +244,7 @@ func scanFiles(adapter FileAdapter, scanOpts ScanOpts) ([]ruleMatch, error) {
 
 				fileMatchList := matchFinder.CheckMatches(file, true)
 
-				err = printMatchList(scanOpts.Formatter, fileMatchList, scanOpts.ShowData, scanOpts.ShowAll, "line")
+				err = printMatchList(scanOpts.Writer, scanOpts.Formatter, fileMatchList, scanOpts.ShowData, scanOpts.ShowAll, "line")
 				if err != nil {
 					return err
 				}

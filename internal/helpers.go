@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"regexp"
 	"sort"
@@ -70,7 +71,7 @@ func pluralize(count int, singular string) string {
 	return fmt.Sprintf("%d %s", count, singular)
 }
 
-func printMatchList(formatter Formatter, matchList []ruleMatch, showData bool, showAll bool, rowStr string) error {
+func printMatchList(writer io.Writer, formatter Formatter, matchList []ruleMatch, showData bool, showAll bool, rowStr string) error {
 	for _, match := range matchList {
 		if showAll || match.Confidence != "low" {
 			var values []string
@@ -82,7 +83,7 @@ func printMatchList(formatter Formatter, matchList []ruleMatch, showData bool, s
 				sort.Strings(values)
 			}
 
-			err := formatter.PrintMatch(os.Stdout, matchInfo{match, rowStr, values})
+			err := formatter.PrintMatch(writer, matchInfo{match, rowStr, values})
 			if err != nil {
 				return err
 			}

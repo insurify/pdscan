@@ -82,6 +82,11 @@ func NewRootCmd() *cobra.Command {
 				return err
 			}
 
+			output, err := cmd.Flags().GetString("output")
+			if err != nil {
+				return err
+			}
+
 			if len(args) == 0 {
 				err := cmd.Help()
 				if err != nil {
@@ -95,7 +100,7 @@ func NewRootCmd() *cobra.Command {
 			// 	return fmt.Errorf("Too many arguments")
 			// }
 
-			return internal.Main(args[0], showData, showAll, limit, processes, only, except, minCount, pattern, debug, format, include, exclude)
+			return internal.Main(args[0], showData, showAll, limit, processes, only, except, minCount, pattern, debug, format, include, exclude, output)
 		},
 	}
 	cmd.PersistentFlags().Bool("show-data", false, "Show data")
@@ -111,6 +116,7 @@ func NewRootCmd() *cobra.Command {
 	cmd.PersistentFlags().String("format", "text", "Output format (experimental)")
 	cmd.PersistentFlags().String("include", "", "Filter tables to scan (comma-separated, supports wildcards)")
 	cmd.PersistentFlags().String("exclude", "", "Exclude tables from scan (comma-separated, supports wildcards)")
+	cmd.PersistentFlags().StringP("output", "o", "", "Output file path (defaults to stdout)")
 	return cmd
 }
 
