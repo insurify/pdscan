@@ -1,9 +1,11 @@
 package internal
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/fatih/color"
@@ -19,6 +21,7 @@ type Formatter interface {
 var Formatters = map[string]Formatter{
 	"text":   TextFormatter{},
 	"ndjson": JSONFormatter{},
+	"csv":    &CSVFormatter{},
 }
 
 // TextFormatter prints the result as human readable text.
@@ -105,4 +108,37 @@ func (f JSONFormatter) PrintMatch(writer io.Writer, match matchInfo) error {
 	} else {
 		return encoder.Encode(entry)
 	}
+}
+
+// CSVFormatter prints the result as CSV rows.
+type CSVFormatter struct {
+	headerWritten bool
+}
+
+func (f *CSVFormatter) PrintMatch(writer io.Writer, match matchInfo) error {
+	w := csv.NewWriter(writer)
+
+	if !f.headerWritten {
+		if err := w.Write([]string{"source", "data_type", "row_count", "sample_value"}); err != nil {
+			return err
+		}
+		f.headerWritten = true
+	}
+
+	rowCount := strconv.Itoa(match.LineCount)
+
+	if len(match.Values) > 0 {
+		for _, val := range match.Values {
+			if err := w.Write([]string{match.Identifier, match.DisplayName, rowCount, val}); err != nil {
+				return err
+			}
+		}
+	} else {
+		if err := w.Write([]string{match.Identifier, match.DisplayName, rowCount, ""}); err != nil {
+			return err
+		}
+	}
+
+	w.Flush()
+	return w.Error()
 }

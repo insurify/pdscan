@@ -118,7 +118,7 @@ func NewRootCmd() *cobra.Command {
 	cmd.PersistentFlags().String("pattern", "", "Custom pattern (experimental)")
 	cmd.PersistentFlags().Bool("debug", false, "Debug")
 	_ = cmd.PersistentFlags().MarkHidden("debug")
-	cmd.PersistentFlags().String("format", "text", "Output format (experimental)")
+	cmd.PersistentFlags().String("format", "text", "Output format: text, ndjson, csv (experimental)")
 	cmd.PersistentFlags().String("include", "", "Filter tables to scan (comma-separated, supports wildcards)")
 	cmd.PersistentFlags().String("exclude", "", "Exclude tables from scan (comma-separated, supports wildcards)")
 	cmd.PersistentFlags().StringP("output", "o", "", "Output file path (defaults to stdout)")
