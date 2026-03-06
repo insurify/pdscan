@@ -30,9 +30,10 @@ type ScanOpts struct {
 	MatchConfig *MatchConfig
 	Include     string
 	Exclude     string
+	BatchSize   int
 }
 
-func Main(urlStr string, showData bool, showAll bool, limit int, processes int, only string, except string, minCount int, pattern string, debug bool, format string, include string, exclude string, output string) error {
+func Main(urlStr string, showData bool, showAll bool, limit int, processes int, only string, except string, minCount int, pattern string, debug bool, format string, include string, exclude string, output string, batchSize int) error {
 	runtime.GOMAXPROCS(processes)
 
 	var writer io.Writer = os.Stdout
@@ -98,7 +99,7 @@ func Main(urlStr string, showData bool, showAll bool, limit int, processes int, 
 		adapter = &SqlAdapter{}
 	}
 
-	matchList, err := adapter.Scan(ScanOpts{urlStr, showData, showAll, limit, debug, formatter, writer, &matchConfig, include, exclude})
+	matchList, err := adapter.Scan(ScanOpts{urlStr, showData, showAll, limit, debug, formatter, writer, &matchConfig, include, exclude, batchSize})
 
 	if err != nil {
 		return err
@@ -131,7 +132,9 @@ func scanDataStore(adapter DataStoreAdapter, scanOpts ScanOpts) ([]ruleMatch, er
 		return nil, err
 	}
 
-	tables, err := adapter.FetchTables()
+	includeSchemas := extractSchemas(scanOpts.Include)
+	excludeSchemas := extractSchemas(scanOpts.Exclude)
+	tables, err := adapter.FetchTables(includeSchemas, excludeSchemas)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +153,7 @@ func scanDataStore(adapter DataStoreAdapter, scanOpts ScanOpts) ([]ruleMatch, er
 
 		var g errgroup.Group
 		var appendMutex sync.Mutex
-		var queryMutex sync.Mutex
+		sem := make(chan struct{}, scanOpts.BatchSize)
 
 		for _, table := range tables {
 			// important - do not remove
@@ -160,10 +163,10 @@ func scanDataStore(adapter DataStoreAdapter, scanOpts ScanOpts) ([]ruleMatch, er
 			g.Go(func() error {
 				start := time.Now()
 
-				// limit to one query at a time
-				queryMutex.Lock()
+				// limit concurrent queries to batch size
+				sem <- struct{}{}
 				tableData, err := adapter.FetchTableData(table, limit)
-				queryMutex.Unlock()
+				<-sem
 
 				if scanOpts.Debug {
 					duration := time.Since(start)
@@ -414,4 +417,22 @@ func makeValidNames(matchConfig *MatchConfig) map[string]bool {
 		validNames[rule.Name] = true
 	}
 	return validNames
+}
+
+func extractSchemas(patterns string) []string {
+	if patterns == "" {
+		return nil
+	}
+	seen := map[string]bool{}
+	for _, p := range strings.Split(patterns, ",") {
+		parts := strings.SplitN(strings.TrimSpace(p), ".", 2)
+		if len(parts) > 0 && parts[0] != "*" && parts[0] != "" {
+			seen[parts[0]] = true
+		}
+	}
+	result := []string{}
+	for s := range seen {
+		result = append(result, s)
+	}
+	return result
 }

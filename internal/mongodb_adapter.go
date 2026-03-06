@@ -52,7 +52,7 @@ func (a *MongodbAdapter) Init(urlStr string) error {
 	return nil
 }
 
-func (a MongodbAdapter) FetchTables() ([]table, error) {
+func (a MongodbAdapter) FetchTables(includeSchemas []string, excludeSchemas []string) ([]table, error) {
 	tables := []table{}
 
 	db := a.DB

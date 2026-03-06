@@ -63,7 +63,7 @@ func (a *ElasticsearchAdapter) Init(urlStr string) error {
 	return nil
 }
 
-func (a ElasticsearchAdapter) FetchTables() ([]table, error) {
+func (a ElasticsearchAdapter) FetchTables(includeSchemas []string, excludeSchemas []string) ([]table, error) {
 	tables := []table{}
 
 	es := a.DB
