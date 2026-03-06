@@ -87,6 +87,14 @@ func NewRootCmd() *cobra.Command {
 				return err
 			}
 
+			batchSize, err := cmd.Flags().GetInt("batch-size")
+			if err != nil {
+				return err
+			}
+			if batchSize < 1 {
+				return fmt.Errorf("batch-size must be positive")
+			}
+
 			var uri string
 			if len(args) > 0 {
 				uri = args[0]
@@ -105,7 +113,7 @@ func NewRootCmd() *cobra.Command {
 			// 	return fmt.Errorf("Too many arguments")
 			// }
 
-			return internal.Main(uri, showData, showAll, limit, processes, only, except, minCount, pattern, debug, format, include, exclude, output)
+			return internal.Main(uri, showData, showAll, limit, processes, only, except, minCount, pattern, debug, format, include, exclude, output, batchSize)
 		},
 	}
 	cmd.PersistentFlags().Bool("show-data", false, "Show data")
@@ -122,6 +130,7 @@ func NewRootCmd() *cobra.Command {
 	cmd.PersistentFlags().String("include", "", "Filter tables to scan (comma-separated, supports wildcards)")
 	cmd.PersistentFlags().String("exclude", "", "Exclude tables from scan (comma-separated, supports wildcards)")
 	cmd.PersistentFlags().StringP("output", "o", "", "Output file path (defaults to stdout)")
+	cmd.PersistentFlags().Int("batch-size", 1, "Number of concurrent database queries")
 	return cmd
 }
 

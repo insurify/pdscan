@@ -42,7 +42,7 @@ func (a *RedisAdapter) Init(urlStr string) error {
 	return nil
 }
 
-func (a RedisAdapter) FetchTables() ([]table, error) {
+func (a RedisAdapter) FetchTables(includeSchemas []string, excludeSchemas []string) ([]table, error) {
 	return []table{{Schema: "", Name: ""}}, nil
 }
 

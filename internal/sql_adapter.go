@@ -2,6 +2,7 @@ package internal
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/lib/pq"
@@ -50,7 +51,7 @@ func (a *SqlAdapter) Init(url string) error {
 	return nil
 }
 
-func (a SqlAdapter) FetchTables() ([]table, error) {
+func (a SqlAdapter) FetchTables(includeSchemas []string, excludeSchemas []string) ([]table, error) {
 	tables := []table{}
 
 	db := a.DB
@@ -61,13 +62,23 @@ func (a SqlAdapter) FetchTables() ([]table, error) {
 	case "sqlite3":
 		query = `SELECT '' AS table_schema, name AS table_name FROM sqlite_master WHERE type = 'table' AND name != 'sqlite_sequence' ORDER BY name`
 	case "mysql":
-		query = `SELECT table_schema AS table_schema, table_name AS table_name FROM information_schema.tables WHERE table_schema = DATABASE() OR (DATABASE() IS NULL AND table_schema NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')) ORDER BY table_schema, table_name`
+		query = `SELECT table_schema AS table_schema, table_name AS table_name FROM information_schema.tables WHERE table_schema = DATABASE() OR (DATABASE() IS NULL AND table_schema NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys'))`
 	case "sqlserver":
-		query = `SELECT table_schema, table_name FROM information_schema.tables WHERE table_type = 'BASE TABLE' ORDER BY table_schema, table_name`
+		query = `SELECT table_schema, table_name FROM information_schema.tables WHERE table_type = 'BASE TABLE'`
 	case "redshift":
-		query = `SELECT table_schema, table_name FROM svv_tables WHERE table_catalog = current_database() ORDER BY table_schema, table_name`
+		query = `SELECT table_schema, table_name FROM svv_tables WHERE table_catalog = current_database()`
 	default:
-		query = `SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema NOT IN ('information_schema', 'pg_catalog') ORDER BY table_schema, table_name`
+		query = `SELECT table_schema, table_name FROM information_schema.tables WHERE table_schema NOT IN ('information_schema', 'pg_catalog')`
+	}
+
+	if a.UnaliasedDriverName != "sqlite3" {
+		if len(includeSchemas) > 0 {
+			query += fmt.Sprintf(" AND table_schema IN (%s)", schemaList(includeSchemas))
+		}
+		if len(excludeSchemas) > 0 {
+			query += fmt.Sprintf(" AND table_schema NOT IN (%s)", schemaList(excludeSchemas))
+		}
+		query += " ORDER BY table_schema, table_name"
 	}
 
 	err := db.Select(&tables, query)
@@ -76,6 +87,14 @@ func (a SqlAdapter) FetchTables() ([]table, error) {
 	}
 
 	return tables, nil
+}
+
+func schemaList(schemas []string) string {
+	quoted := make([]string, len(schemas))
+	for i, s := range schemas {
+		quoted[i] = fmt.Sprintf("'%s'", s)
+	}
+	return strings.Join(quoted, ", ")
 }
 
 func (a SqlAdapter) FetchTableData(table table, limit int) (*tableData, error) {
